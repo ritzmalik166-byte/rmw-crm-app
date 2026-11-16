@@ -34,6 +34,8 @@ export default function AdminHub() {
       title: "Leads",
       items: [
         { icon: "pricetags", tone: colors.warning, label: "Lead stages", href: "/admin/statuses", perm: ["lead_config.manage", "lead.view"] },
+        { icon: "logo-facebook", tone: "#0082FB", label: "Meta Lead Ads", href: "/admin/meta", perm: "integration.view" },
+        { icon: "trending-up", tone: "#0064E0", label: "Meta Ads analytics", href: "/admin/meta-analytics", perm: "analytics.view" },
         { icon: "git-network", tone: "#0284C7", label: "Websites & integrations", href: "/admin/integrations", perm: ["integration.view", "website.manage"] },
         { icon: "bar-chart", tone: colors.violet, label: "Analytics", href: "/admin/analytics", perm: "analytics.view" },
       ],

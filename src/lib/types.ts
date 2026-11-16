@@ -24,6 +24,7 @@ export type LeadRow = {
   medium?: string | null;
   campaign?: string | null;
   source_type?: string | null; // MANUAL | WEBSITE | META | …
+  junk_reason?: string | null; // set when the lead was flagged as junk / test / repeat
   next_followup_at?: string | null;
   created_at: string;
   external_created_at?: string | null;

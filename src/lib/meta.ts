@@ -21,22 +21,49 @@ export function useMetaForms(range?: { from: string; to: string } | null) {
 
 export type MetaStatus = {
   configured: boolean;
+  missingConfig?: string[];
+  webhookConfigured?: boolean;
+  apiVersion?: string;
   state: "NOT_CONFIGURED" | "NOT_CONNECTED" | "SETUP_REQUIRED" | "CONNECTED" | "ERROR";
   connection: null | {
     metaUserName: string | null;
-    page: { name: string; webhookSubscribed: boolean } | null;
-    adAccount: { name: string } | null;
-    website: { code: string } | null;
+    connectedAt?: string | null;
+    connectedBy?: string | null;
+    business?: { id: string; name: string } | null;
+    page: { id?: string; name: string; webhookSubscribed: boolean } | null;
+    instagram?: { id: string; name: string } | null;
+    adAccount: { id?: string; name: string } | null;
+    website: { id?: number; code: string; name?: string } | null;
+    assignmentTeam?: { id: number; name: string } | null;
     formsCount: number;
   };
   health?: {
-    token: { valid: boolean | null };
-    api: { ok: boolean | null };
+    token: { valid: boolean | null; expiresAt?: string | null; missingScopes?: string[] };
+    api: { ok: boolean | null; error?: string | null };
     webhook: { subscribed: boolean; lastReceivedAt: string | null };
     leads: { total: number; last24h: number };
+    lastLeadAt?: string | null;
+    events?: { failed: number; pending: number; last24h: number };
   };
   sync?: { running: boolean; lastSyncAt: string | null; status: string | null; stats: SyncStats | null };
   error: { message: string } | null;
+};
+
+export type MetaAssets = {
+  selected?: { businessId?: string; pageId?: string; instagramId?: string; adAccountId?: string; websiteId?: number; assignmentTeamId?: number } | null;
+  businesses: { id: string; name: string }[];
+  pages: { id: string; name: string; businessId?: string | null; instagram?: { id: string; username?: string | null } | null }[];
+  adAccounts: { id: string; name: string; currency?: string | null; businessId?: string | null }[];
+  warnings?: string[];
+};
+
+export type MetaEvent = { id: number; leadgen_id: string; source: string; status: string; lead_id: number | null; error: string | null; created_at: string };
+export type MetaLog = { id: number; level: "info" | "warn" | "error"; message: string; created_at: string };
+
+export const fmtNum = (v: number | null | undefined) => Number(v || 0).toLocaleString("en-IN");
+export const fmtMoney = (v: number | null | undefined, currency?: string | null) => {
+  if (v == null) return "—";
+  try { return new Intl.NumberFormat("en-IN", { style: "currency", currency: currency || "INR", maximumFractionDigits: 0 }).format(v); } catch { return `${currency || "₹"} ${Math.round(v)}`; }
 };
 
 export type SyncStats = {

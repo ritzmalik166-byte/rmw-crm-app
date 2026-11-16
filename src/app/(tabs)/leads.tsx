@@ -78,6 +78,7 @@ function LeadsScreen({ initialRange, initialFilter, initialChannel, initialFormI
   const [channel, setChannel] = useState<Channel | null>(initialFormId ? "meta" : initialChannel);
   const [formId, setFormId] = useState<string | null>(initialFormId);
   const [formsOpen, setFormsOpen] = useState(false);
+  const [junkOnly, setJunkOnly] = useState(false); // Meta: show junk & test leads instead of genuine ones
   const [range, setRange] = useState<Range | null>(initialRange);
   const [text, setText] = useState("");
   const [search, setSearch] = useState("");
@@ -93,9 +94,10 @@ function LeadsScreen({ initialRange, initialFilter, initialChannel, initialFormI
     ...FILTERS.find((f) => f.key === filter)!.params,
     ...(isMpf && channel ? { channel } : {}),
     ...(isMpf && channel === "meta" && formId ? { formId } : {}),
+    ...(isMpf && channel === "meta" && junkOnly ? { junk: "only" } : {}),
   };
   const q = useInfiniteQuery({
-    queryKey: ["leads", filter, channel, formId, search, range?.from, range?.to],
+    queryKey: ["leads", filter, channel, formId, junkOnly, search, range?.from, range?.to],
     initialPageParam: 1,
     queryFn: ({ pageParam }) => {
       const qs = new URLSearchParams({ page: String(pageParam), limit: "25", ...params, ...(search ? { search } : {}), ...(range ? { from: range.from, to: range.to } : {}), sort: "received_at", dir: "desc" });
@@ -112,7 +114,13 @@ function LeadsScreen({ initialRange, initialFilter, initialChannel, initialFormI
   const rows = q.data?.pages.flatMap((p) => p.rows) ?? [];
   const total = q.data?.pages[0]?.meta.total;
   const pickFilter = (k: FilterKey) => { setFilter(k); if (k !== "mpf") { setChannel(null); setFormId(null); } };
-  const pickChannel = (c: Channel | null) => { setChannel(c); if (c !== "meta") setFormId(null); };
+  const pickChannel = (c: Channel | null) => { setChannel(c); if (c !== "meta") { setFormId(null); setJunkOnly(false); } };
+  const junkCount = useQuery({
+    queryKey: ["leads", "meta-junk-count"],
+    queryFn: () => api<Paged<LeadRow>>("/crm/leads?pipeline=mpf&channel=meta&junk=only&limit=1").then((r) => r.meta.total),
+    enabled: isMpf && channel === "meta",
+    staleTime: 60_000,
+  });
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.page }}>
@@ -123,6 +131,12 @@ function LeadsScreen({ initialRange, initialFilter, initialChannel, initialFormI
           {FILTERS.map((f) => <Chip key={f.key} label={f.label} count={countFor(f.key)} active={filter === f.key} onPress={() => pickFilter(f.key)} />)}
         </ScrollView>
         {isMpf ? <ChannelBoxes channel={channel} onChange={pickChannel} range={range} /> : null}
+        {isMpf && channel === "meta" ? (
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <Chip label="Genuine leads" icon="checkmark-circle-outline" active={!junkOnly} onPress={() => setJunkOnly(false)} />
+            <Chip label="Junk & test" icon="alert-circle-outline" count={junkCount.data} active={junkOnly} onPress={() => setJunkOnly(true)} />
+          </View>
+        ) : null}
         {isMpf && channel === "meta" ? (
           <Pressable onPress={() => setFormsOpen(true)} style={st.formBtn}>
             <Ionicons name="document-text-outline" size={17} color="#0082FB" />

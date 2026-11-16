@@ -1,10 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { router } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, Linking, Pressable, RefreshControl, StyleSheet, Switch, Text, View } from "react-native";
+import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleSheet, Switch, Text, View } from "react-native";
 import { MetaLogo } from "@/components/Meta";
-import { CRM_URL } from "@/lib/api";
 import { fmtDuration, syncEstimate, type MetaStatus, type SyncStats } from "@/lib/meta";
 import { Sheet, StackHeader } from "@/components/kit";
 import { Badge, Button, Chip, EmptyState, ErrorView, Input, Loading, T } from "@/components/ui";
@@ -170,9 +170,7 @@ function MetaCard() {
             ? <Button title="Stop sync" icon="stop-circle-outline" size="sm" variant="outline" style={{ flex: 1 }} loading={stop.isPending} onPress={() => stop.mutate()} />
             : <Button title="Full sync (90 days)" icon="refresh" size="sm" variant="soft" style={{ flex: 1 }} loading={sync.isPending} onPress={() => sync.mutate()} />
         ) : null}
-        {canSA("integration.manage") ? (
-          <Button title={c ? "Manage on web" : "Connect on web"} icon="open-outline" size="sm" variant="outline" style={{ flex: 1 }} onPress={() => void Linking.openURL(`${CRM_URL}/super-admin/integrations`)} />
-        ) : null}
+        <Button title={c ? "Manage" : canSA("integration.manage") ? "Connect" : "Details"} icon="settings-outline" size="sm" variant="outline" style={{ flex: 1 }} onPress={() => router.push("/admin/meta")} />
       </View>
     </View>
   );

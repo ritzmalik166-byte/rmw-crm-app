@@ -9,7 +9,11 @@ import type { LeadRow } from "@/lib/types";
 import { LEAD_SOURCE_TYPES } from "@/lib/meta";
 import { MetaLogo } from "@/components/Meta";
 
-type Lead = Pick<LeadRow, "id" | "name" | "interest" | "website_code" | "status_name" | "status_color" | "created_at"> & Partial<LeadRow>;
+const JUNK_LABELS: Record<string, string> = {
+  test: "Test", repeat: "Repeat", spam: "Spam", internal: "Internal", bad_phone: "Fake phone", bad_name: "Bad name", empty: "Empty", job_seeker: "Job seeker",
+};
+
+type Lead =Pick<LeadRow, "id" | "name" | "interest" | "website_code" | "status_name" | "status_color" | "created_at"> & Partial<LeadRow>;
 
 export function LeadCard({ lead }: { lead: Lead }) {
   const pipe = pipelineFor(lead.website_code);
@@ -25,6 +29,9 @@ export function LeadCard({ lead }: { lead: Lead }) {
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           <Text style={st.name} numberOfLines={1}>{lead.name || "Unnamed lead"}</Text>
           {isMeta ? <MetaLogo size={20} badge={false} /> : null}
+          {lead.junk_reason && lead.junk_reason !== "career" ? (
+            <Text style={st.junk}>{JUNK_LABELS[lead.junk_reason] ?? lead.junk_reason}</Text>
+          ) : null}
           <StatusBadge name={lead.status_name} color={lead.status_color} />
           <Text style={st.time}>{timeAgo(lead.external_created_at || lead.created_at)}</Text>
         </View>
@@ -58,5 +65,6 @@ const st = StyleSheet.create({
   time: { marginLeft: "auto", fontSize: 11.5, color: colors.textFaint },
   phone: { fontSize: 13.5, color: colors.text, fontWeight: "500" },
   meta: { fontSize: 12.5, color: colors.textMuted },
+  junk: { fontSize: 10.5, fontWeight: "700", color: colors.danger, backgroundColor: colors.dangerSoft, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, overflow: "hidden" },
   act: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
 });
