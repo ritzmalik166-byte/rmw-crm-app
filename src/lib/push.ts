@@ -26,7 +26,7 @@ export async function getPushToken(): Promise<string | null> {
       // eslint-disable-next-line import/namespace -- enum is re-exported from a .types module the lint resolver misses
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 150, 250],
-      lightColor: "#D9A441",
+      lightColor: "#5B3FD6",
       sound: "default",
     });
   }

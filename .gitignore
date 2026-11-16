@@ -15,6 +15,7 @@ expo-env.d.ts
 *.jks
 *.keystore
 credentials.json
+*firebase-adminsdk*.json
 *.p8
 *.p12
 *.key

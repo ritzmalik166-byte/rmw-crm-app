@@ -17,11 +17,14 @@
     },
     "android": {
       "package": "com.ritzmediaworld.crm",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/images/crm-maskable.png"
       },
-      "permissions": [],
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ],
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -38,6 +41,14 @@
           "imageWidth": 120
         }
       ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#5B3FD6",
+          "defaultChannel": "default"
+        }
+      ],
       "expo-font",
       "@react-native-community/datetimepicker",
       [
@@ -52,7 +63,16 @@
       "typedRoutes": true
     },
     "extra": {
-      "crmUrl": "https://crm.ritzmediaworld.com"
-    }
+      "crmUrl": "https://crm.ritzmediaworld.com",
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "ad9244ee-eed5-4023-b4bd-b719cc09187b"
+      }
+    },
+    "owner": "aryan_1212"
   }
 }

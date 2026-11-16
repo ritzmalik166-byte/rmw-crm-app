@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "462064164309",
+    "project_id": "rmw-crm-5be19",
+    "storage_bucket": "rmw-crm-5be19.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:462064164309:android:a5b8f774c2dd8332bef15c",
+        "android_client_info": {
+          "package_name": "com.ritzmediaworld.crm"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "462064164309-59sd511lbv4smleqc059805p6v8conrt.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAl8rwg8KRIXB4l3gvhkM32skuiGZlxtnY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "462064164309-59sd511lbv4smleqc059805p6v8conrt.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
