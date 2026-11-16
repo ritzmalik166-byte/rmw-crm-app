@@ -1,0 +1,53 @@
+name: EAS build & update
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      force_build:
+        description: "Force a new APK build"
+        type: boolean
+        default: false
+
+concurrency:
+  group: eas-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Is there already a build for this native runtime?
+        id: fp
+        run: |
+          FP=$(npx expo-updates fingerprint:generate --platform android | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).hash))")
+          echo "fingerprint=$FP"
+          COUNT=$(eas build:list --platform android --profile preview --status finished --runtime-version "$FP" --json --non-interactive --limit 1 | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s||'[]').length))")
+          echo "existing builds: $COUNT"
+          if [ "$COUNT" = "0" ] || [ "${{ inputs.force_build }}" = "true" ]; then echo "build=true" >> "$GITHUB_OUTPUT"; else echo "build=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Build new APK (native changes)
+        if: steps.fp.outputs.build == 'true'
+        run: eas build --platform android --profile preview --non-interactive --no-wait
+
+      - name: Publish OTA update (JS changes)
+        if: steps.fp.outputs.build == 'false'
+        run: eas update --channel preview --platform android --message "${{ github.event.head_commit.message || 'Manual update' }}" --non-interactive

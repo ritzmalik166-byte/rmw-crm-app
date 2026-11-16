@@ -22,6 +22,8 @@ export type LeadRow = {
   assigned_user_name: string | null;
   source?: string | null;
   medium?: string | null;
+  campaign?: string | null;
+  source_type?: string | null; // MANUAL | WEBSITE | META | …
   next_followup_at?: string | null;
   created_at: string;
   external_created_at?: string | null;
@@ -50,6 +52,14 @@ export type LeadDetail = LeadRow & {
   activities: Activity[];
   notes: Note[];
   followups: Followup[];
+  // Meta Lead Ads attribution (null for website / manual leads)
+  source_lead_id?: string | null;
+  campaign_id?: string | null; campaign_name?: string | null;
+  ad_set_id?: string | null; ad_set_name?: string | null;
+  ad_id?: string | null; ad_name?: string | null;
+  form_id?: string | null; form_name?: string | null;
+  page_id?: string | null;
+  external_metadata?: unknown;
   duplicates?: { id: number; status: string; candidate_id: number; name: string | null; external_lead_id: string; website_code: string | null }[];
 };
 

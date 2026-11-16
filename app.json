@@ -73,6 +73,14 @@
         "projectId": "ad9244ee-eed5-4023-b4bd-b719cc09187b"
       }
     },
-    "owner": "aryan_1212"
+    "owner": "aryan_1212",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/ad9244ee-eed5-4023-b4bd-b719cc09187b",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    }
   }
 }

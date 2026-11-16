@@ -6,19 +6,25 @@ import { timeAgo, whatsappUrl } from "@/lib/format";
 import { pipelineFor } from "@/lib/pipelines";
 import { colors, shadow } from "@/lib/theme";
 import type { LeadRow } from "@/lib/types";
+import { LEAD_SOURCE_TYPES } from "@/lib/meta";
+import { MetaLogo } from "@/components/Meta";
 
 type Lead = Pick<LeadRow, "id" | "name" | "interest" | "website_code" | "status_name" | "status_color" | "created_at"> & Partial<LeadRow>;
 
 export function LeadCard({ lead }: { lead: Lead }) {
   const pipe = pipelineFor(lead.website_code);
   const wa = whatsappUrl(lead.phone);
-  const source = [pipe ? `Website – ${pipe.short}` : lead.website_code, lead.form_type].filter(Boolean).join(" · ");
+  const isMeta = lead.source_type === LEAD_SOURCE_TYPES.META;
+  const source = isMeta
+    ? [`Meta – ${lead.source === "instagram" ? "Instagram" : "Facebook"}`, lead.campaign].filter(Boolean).join(" · ")
+    : [pipe ? `Website – ${pipe.short}` : lead.website_code, lead.form_type].filter(Boolean).join(" · ");
   return (
     <Pressable onPress={() => router.push(`/lead/${lead.id}`)} style={({ pressed }) => [st.card, pressed && { transform: [{ scale: 0.985 }] }]}>
       <Avatar name={lead.name} size={46} />
       <View style={{ flex: 1, gap: 4 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           <Text style={st.name} numberOfLines={1}>{lead.name || "Unnamed lead"}</Text>
+          {isMeta ? <MetaLogo size={20} badge={false} /> : null}
           <StatusBadge name={lead.status_name} color={lead.status_color} />
           <Text style={st.time}>{timeAgo(lead.external_created_at || lead.created_at)}</Text>
         </View>

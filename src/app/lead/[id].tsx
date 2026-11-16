@@ -14,6 +14,8 @@ import { formatDateTime, timeAgo, titleCase, whatsappUrl } from "@/lib/format";
 import { colors, shadow } from "@/lib/theme";
 import type { Followup, LeadDetail, Lookups } from "@/lib/types";
 import { useAuth } from "@/providers/AuthProvider";
+import { MetaSourceCard } from "@/components/Meta";
+import { LEAD_SOURCE_TYPES } from "@/lib/meta";
 
 const ACTIVITY: Record<string, { label: string; icon: IconName; tone: string }> = {
   LEAD_CREATED: { label: "Lead created", icon: "sparkles", tone: colors.blue },
@@ -27,6 +29,7 @@ const ACTIVITY: Record<string, { label: string; icon: IconName; tone: string }> 
   FOLLOWUP_COMPLETED: { label: "Follow-up completed", icon: "checkmark-circle", tone: colors.success },
   CONVERTED: { label: "Converted", icon: "trophy", tone: colors.success },
   LEAD_MERGED: { label: "Merged", icon: "git-merge", tone: "#F76B15" },
+  META_LEAD_RECEIVED: { label: "Lead received from Meta Ads", icon: "infinite", tone: "#0082FB" },
 };
 
 const describe = (type: string, raw: unknown) => {
@@ -35,6 +38,8 @@ const describe = (type: string, raw: unknown) => {
   if (type === "STATUS_CHANGED" || type === "CONVERTED") return `${titleCase(m.from as string)} → ${titleCase(m.to as string)}`;
   if (type === "LEAD_UPDATED") return (m.fields as string[] | undefined)?.join(", ");
   if (type === "FOLLOWUP_CREATED" && m.dueAt) return `Due ${formatDateTime(m.dueAt as string)}`;
+  if (type === "META_LEAD_RECEIVED") return [m.campaign && `Campaign: ${m.campaign}`, m.form && `Form: ${m.form}`].filter(Boolean).join(" · ") || null;
+  if (type === "LEAD_SYNCED" && m.via === "meta") return "Re-delivered by Meta";
   return (m.reason as string) || null;
 };
 
@@ -147,7 +152,8 @@ export default function LeadScreen() {
     { text: "Cancel follow-up", style: "destructive", onPress: () => fuAction.mutate({ fid: f.id, status: "CANCELLED" }) },
     { text: "Close", style: "cancel" },
   ]);
-  const source = [lead.source, lead.medium !== "none" ? lead.medium : null].filter(Boolean).join(" / ");
+  const isMeta = lead.source_type === LEAD_SOURCE_TYPES.META;
+  const source = isMeta ? "" : [lead.source, lead.medium !== "none" ? lead.medium : null].filter(Boolean).join(" / ");
 
   return (
     <ScrollView
@@ -243,6 +249,8 @@ export default function LeadScreen() {
             ) : null}
           </View>
         </Section>
+
+        {isMeta ? <Section title="Source"><MetaSourceCard lead={lead} /></Section> : null}
 
         <Section title={openFu.length ? `Follow-ups · ${openFu.length} open` : "Follow-ups"}>
           <View style={[st.panel, { padding: 16, gap: 12 }]}>

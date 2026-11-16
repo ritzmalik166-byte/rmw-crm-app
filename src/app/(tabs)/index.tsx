@@ -14,6 +14,8 @@ import { colors, gradients, shadow } from "@/lib/theme";
 import type { LeadRow, Paged } from "@/lib/types";
 import { useAuth } from "@/providers/AuthProvider";
 import { useLookups } from "@/lib/hooks";
+import { MetaFormRow } from "@/components/Meta";
+import { useMetaForms } from "@/lib/meta";
 
 type Dashboard = {
   mine: {
@@ -49,6 +51,7 @@ export default function Home() {
   const [rangeOpen, setRangeOpen] = useState(false);
   const rq = `from=${range.from}&to=${range.to}`;
   const label = rangeLabel(range);
+  const metaForms = useMetaForms(range);
 
   const dash = useQuery({ queryKey: ["dashboard", range.from, range.to], queryFn: () => api<Dashboard>(`/crm/dashboard?${rq}`), placeholderData: keepPreviousData, refetchInterval: 60_000 });
   const pipes = useQuery({
@@ -214,6 +217,16 @@ export default function Home() {
             </View>
           )}
         </Section>
+
+        {metaForms.data?.length ? (
+          <Section title={`Meta lead forms · ${label}`} action="All Meta leads" onAction={() => router.push({ pathname: "/leads", params: { view: "mpf", channel: "meta" } })}>
+            <View style={[st.panel, { paddingVertical: 4, overflow: "hidden" }]}>
+              {metaForms.data.slice(0, 6).map((f) => (
+                <MetaFormRow key={f.formId} form={f} onPress={() => router.push({ pathname: "/leads", params: { view: "mpf", channel: "meta", formId: f.formId } })} />
+              ))}
+            </View>
+          </Section>
+        ) : null}
 
         {team?.teamPerformance.length ? (
           <Section title="Team performance">

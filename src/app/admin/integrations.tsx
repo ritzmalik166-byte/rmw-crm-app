@@ -1,7 +1,11 @@
-import { useQuery } from "@tanstack/react-query";
+import { Ionicons } from "@expo/vector-icons";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Clipboard from "expo-clipboard";
-import { useState } from "react";
-import { Alert, FlatList, Pressable, RefreshControl, StyleSheet, Switch, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, Alert, FlatList, Linking, Pressable, RefreshControl, StyleSheet, Switch, Text, View } from "react-native";
+import { MetaLogo } from "@/components/Meta";
+import { CRM_URL } from "@/lib/api";
+import { fmtDuration, syncEstimate, type MetaStatus, type SyncStats } from "@/lib/meta";
 import { Sheet, StackHeader } from "@/components/kit";
 import { Badge, Button, Chip, EmptyState, ErrorView, Input, Loading, T } from "@/components/ui";
 import { useWebsites, type Website } from "@/lib/admin";
@@ -76,8 +80,107 @@ const Row = ({ label, value }: { label: string; value: string }) => (
   <View style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 4 }}><T muted size={13}>{label}</T><T size={13} bold>{value}</T></View>
 );
 
+const META_STATE: Record<MetaStatus["state"], { label: string; bg: string; fg: string }> = {
+  CONNECTED: { label: "Connected", bg: colors.successSoft, fg: colors.success },
+  SETUP_REQUIRED: { label: "Setup required", bg: colors.warningSoft, fg: colors.warning },
+  ERROR: { label: "Connection error", bg: colors.dangerSoft, fg: colors.danger },
+  NOT_CONNECTED: { label: "Not connected", bg: "#EEF0F5", fg: "#4A5070" },
+  NOT_CONFIGURED: { label: "Not configured", bg: "#EEF0F5", fg: "#4A5070" },
+};
+
+const Check = ({ label, ok }: { label: string; ok: boolean | null | undefined }) => (
+  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+    <Ionicons name={ok ? "checkmark-circle" : ok === false ? "close-circle" : "remove-circle-outline"} size={15} color={ok ? colors.success : ok === false ? colors.danger : colors.textFaint} />
+    <Text style={{ fontSize: 13, color: colors.textMuted }}>{label}</Text>
+  </View>
+);
+
+/** Live sync progress: spinner, bar, % and time left (ticks every second between 3s status polls). */
+function SyncProgress({ stats }: { stats: SyncStats | null | undefined }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
+  const { pct, elapsed, left } = syncEstimate(stats, now);
+  const phase = stats?.phase === "forms" ? "Reading lead forms…" : stats?.phase === "spend" ? "Updating campaign spend…" : "Importing leads";
+  return (
+    <View style={{ gap: 6, backgroundColor: "#EEF6FF", borderRadius: 14, padding: 12 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <ActivityIndicator size="small" color="#0082FB" />
+        <Text style={{ flex: 1, fontSize: 13.5, fontWeight: "700", color: colors.text }}>{phase}</Text>
+        {pct != null ? <Text style={{ fontSize: 13.5, fontWeight: "800", color: "#0064E0" }}>{pct}%</Text> : null}
+      </View>
+      <View style={{ height: 8, borderRadius: 4, backgroundColor: "#D6E9FF", overflow: "hidden" }}>
+        <View style={{ height: 8, borderRadius: 4, backgroundColor: "#0082FB", width: `${pct ?? 15}%`, opacity: pct == null ? 0.5 : 1 }} />
+      </View>
+      {stats?.phase === "leads" && stats.forms ? <Text style={st.meta} numberOfLines={1}>Form {Math.min((stats.formsDone ?? 0) + 1, stats.forms)} of {stats.forms}{stats.currentForm ? ` · ${stats.currentForm}` : ""}</Text> : null}
+      {stats?.inProgress ? <Text style={st.meta}>Imported {stats.imported} · Already in CRM {stats.duplicatesSkipped}{stats.errors ? ` · Errors ${stats.errors}` : ""}</Text> : null}
+      <Text style={[st.meta, { color: colors.text }]}>
+        {left != null ? `About ${fmtDuration(left)} left` : "Estimating time left…"}{elapsed != null ? ` · running ${fmtDuration(elapsed)}` : ""}
+      </Text>
+    </View>
+  );
+}
+
+/** Meta Lead Ads status. Connecting needs Facebook login in a browser, so that step opens the web CRM. */
+function MetaCard() {
+  const { canSA } = useAuth();
+  const s = useQuery({ queryKey: ["admin", "meta-status"], queryFn: () => api<MetaStatus>("/admin/integrations/meta/status"), refetchInterval: (q) => (q.state.data?.sync?.running ? 3000 : 60_000) });
+  const sync = useAction(() => api("/super-admin/integrations/meta/sync", { method: "POST", body: { full: true } }), {
+    invalidate: [["admin", "meta-status"]],
+    onDone: () => Alert.alert("Full sync started", "Reading the last 90 days of Meta leads. This can take a few minutes."),
+  });
+  const stop = useAction(() => api("/super-admin/integrations/meta/sync/stop", { method: "POST" }), {
+    invalidate: [["admin", "meta-status"]],
+    success: "Stopping sync",
+  });
+  if (s.isLoading || !s.data) return <View style={[st.card, { height: 120 }]} />;
+  const d = s.data;
+  const c = d.connection;
+  const tone = META_STATE[d.state];
+  const stats = d.sync?.stats;
+  return (
+    <View style={[st.card, { gap: 10, marginBottom: 6 }]}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+        <MetaLogo size={40} />
+        <View style={{ flex: 1 }}>
+          <Text style={st.name}>Meta Lead Ads</Text>
+          <Text style={st.meta}>Facebook + Instagram</Text>
+        </View>
+        <Badge label={tone.label} bg={tone.bg} fg={tone.fg} dot />
+      </View>
+      {c ? (
+        <>
+          <Row label="Page" value={c.page?.name ?? "Not selected"} />
+          <Row label="Ad account" value={c.adAccount?.name ?? "—"} />
+          <Row label="Pipeline · forms" value={`${c.website?.code ?? "—"} · ${c.formsCount}`} />
+          <Row label="Last webhook" value={d.health?.webhook.lastReceivedAt ? timeAgo(d.health.webhook.lastReceivedAt) : "Never"} />
+          <Row label="Last sync" value={d.sync?.lastSyncAt ? timeAgo(d.sync.lastSyncAt) : "Never"} />
+          <View style={{ flexDirection: "row", gap: 14, flexWrap: "wrap" }}>
+            <Check label="Webhook" ok={d.health?.webhook.subscribed} />
+            <Check label="API" ok={d.health?.api.ok} />
+            <Check label="Token" ok={d.health?.token.valid} />
+          </View>
+          {d.sync?.running ? <SyncProgress stats={stats} /> : null}
+          {!d.sync?.running && stats && d.sync?.lastSyncAt ? <Text style={st.meta}>{stats.stopped ? "Stopped · " : ""}Imported {stats.imported} · Duplicates skipped {stats.duplicatesSkipped} · Errors {stats.errors}</Text> : null}
+        </>
+      ) : <Text style={st.meta}>Facebook and Instagram lead form submissions arrive in the CRM instantly once connected.</Text>}
+      {d.error ? <Text style={[st.meta, { color: colors.danger }]}>{d.error.message}</Text> : null}
+      <View style={{ flexDirection: "row", gap: 8 }}>
+        {c && d.state !== "SETUP_REQUIRED" && canSA("integration.manage") ? (
+          d.sync?.running
+            ? <Button title="Stop sync" icon="stop-circle-outline" size="sm" variant="outline" style={{ flex: 1 }} loading={stop.isPending} onPress={() => stop.mutate()} />
+            : <Button title="Full sync (90 days)" icon="refresh" size="sm" variant="soft" style={{ flex: 1 }} loading={sync.isPending} onPress={() => sync.mutate()} />
+        ) : null}
+        {canSA("integration.manage") ? (
+          <Button title={c ? "Manage on web" : "Connect on web"} icon="open-outline" size="sm" variant="outline" style={{ flex: 1 }} onPress={() => void Linking.openURL(`${CRM_URL}/super-admin/integrations`)} />
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
 export default function Integrations() {
   const { can, canSA } = useAuth();
+  const qc = useQueryClient();
   const [tab, setTab] = useState<"sites" | "events">("sites");
   const [evStatus, setEvStatus] = useState("");
   const health = useQuery({ queryKey: ["admin", "integrations"], queryFn: () => api<Health[]>("/admin/integrations"), enabled: can("integration.view") });
@@ -107,7 +210,8 @@ export default function Integrations() {
           data={health.data ?? []}
           keyExtractor={(h) => String(h.website_id)}
           contentContainerStyle={{ padding: 16, gap: 10, paddingBottom: 40 }}
-          refreshControl={<RefreshControl refreshing={health.isRefetching} onRefresh={() => void health.refetch()} tintColor={colors.primary} />}
+          refreshControl={<RefreshControl refreshing={health.isRefetching} onRefresh={() => { void health.refetch(); void qc.invalidateQueries({ queryKey: ["admin", "meta-status"] }); }} tintColor={colors.primary} />}
+          ListHeaderComponent={<MetaCard />}
           renderItem={({ item: h }) => (
             <Pressable onPress={() => setOpen(h)} style={st.card}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
