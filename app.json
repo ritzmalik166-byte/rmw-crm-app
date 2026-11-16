@@ -1,0 +1,58 @@
+{
+  "expo": {
+    "name": "RMW CRM",
+    "slug": "rmw-crm",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/crm-icon.png",
+    "scheme": "rmwcrm",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#160E33",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ritzmediaworld.crm",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.ritzmediaworld.crm",
+      "adaptiveIcon": {
+        "backgroundColor": "#FFFFFF",
+        "foregroundImage": "./assets/images/crm-maskable.png"
+      },
+      "permissions": [],
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/images/favicon.png",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#160E33",
+          "image": "./assets/images/crm-icon.png",
+          "imageWidth": 120
+        }
+      ],
+      "expo-font",
+      "@react-native-community/datetimepicker",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "RMW CRM uses your photos to set your profile picture.",
+          "cameraPermission": "RMW CRM uses the camera to take your profile picture."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "crmUrl": "https://crm.ritzmediaworld.com"
+    }
+  }
+}
