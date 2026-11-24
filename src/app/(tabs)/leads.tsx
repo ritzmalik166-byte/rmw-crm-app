@@ -12,7 +12,8 @@ import { Chip, EmptyState, ErrorView, Header, Loading, SearchBar } from "@/compo
 import { api, apiMessage } from "@/lib/api";
 import { useMetaForms, type Channel } from "@/lib/meta";
 import { colors, shadow } from "@/lib/theme";
-import type { PipelineCounts, PipelineKey } from "@/lib/pipelines";
+import { PIPELINES, usePipelines, type PipelineCounts, type PipelineKey } from "@/lib/pipelines";
+import { useAuth } from "@/providers/AuthProvider";
 import type { LeadRow, Paged } from "@/lib/types";
 
 const FILTERS = [
@@ -22,6 +23,7 @@ const FILTERS = [
   { key: "mpf", label: "MPF Leads", params: { pipeline: "mpf" } },
   { key: "rmw", label: "RMW Leads", params: { pipeline: "rmw" } },
   { key: "ct", label: "CT Leads", params: { pipeline: "ct" } },
+  { key: "ctmpl", label: "CTMPL Leads", params: { pipeline: "ctmpl" } },
   { key: "career", label: "Careers", params: { pipeline: "career" } },
 ] as const;
 
@@ -87,12 +89,17 @@ function LeadsScreen({ initialRange, initialFilter, initialChannel, initialFormI
     return () => clearTimeout(t);
   }, [text]);
 
+  const { can } = useAuth();
+  const canMeta = can("lead.channel.meta");
+  const allowed = usePipelines();
+  // Pipeline chips only for websites this user can access.
+  const filters = FILTERS.filter((f) => !PIPELINES.some((p) => p.key === f.key) || allowed.some((p) => p.key === f.key));
   const isMpf = filter === "mpf";
-  const forms = useMetaForms();
+  const forms = useMetaForms(null, canMeta);
   const form = formId ? forms.data?.find((f) => f.formId === formId) : null;
   const params: Record<string, string> = {
     ...FILTERS.find((f) => f.key === filter)!.params,
-    ...(isMpf && channel ? { channel } : {}),
+    ...(isMpf && channel && (channel !== "meta" || canMeta) ? { channel } : {}),
     ...(isMpf && channel === "meta" && formId ? { formId } : {}),
     ...(isMpf && channel === "meta" && junkOnly ? { junk: "only" } : {}),
   };
@@ -110,7 +117,7 @@ function LeadsScreen({ initialRange, initialFilter, initialChannel, initialFormI
     queryFn: () => api<Counts>(`/crm/pipelines${range ? `?from=${range.from}&to=${range.to}` : ""}`),
     placeholderData: keepPreviousData,
   });
-  const countFor = (k: string) => (k === "mpf" || k === "rmw" || k === "ct" || k === "career" ? pipes.data?.counts[k]?.total : undefined);
+  const countFor = (k: string) => (k === "career" || PIPELINES.some((p) => p.key === k) ? pipes.data?.counts[k as PipelineKey | "career"]?.total : undefined);
   const rows = q.data?.pages.flatMap((p) => p.rows) ?? [];
   const total = q.data?.pages[0]?.meta.total;
   const pickFilter = (k: FilterKey) => { setFilter(k); if (k !== "mpf") { setChannel(null); setFormId(null); } };
@@ -118,7 +125,7 @@ function LeadsScreen({ initialRange, initialFilter, initialChannel, initialFormI
   const junkCount = useQuery({
     queryKey: ["leads", "meta-junk-count"],
     queryFn: () => api<Paged<LeadRow>>("/crm/leads?pipeline=mpf&channel=meta&junk=only&limit=1").then((r) => r.meta.total),
-    enabled: isMpf && channel === "meta",
+    enabled: canMeta && isMpf && channel === "meta",
     staleTime: 60_000,
   });
 
@@ -128,16 +135,16 @@ function LeadsScreen({ initialRange, initialFilter, initialChannel, initialFormI
       <View style={{ paddingHorizontal: 16, gap: 12, paddingBottom: 10 }}>
         <SearchBar value={text} onChangeText={setText} placeholder="Search name, phone, email or ID" />
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 16 }} style={{ marginRight: -16 }}>
-          {FILTERS.map((f) => <Chip key={f.key} label={f.label} count={countFor(f.key)} active={filter === f.key} onPress={() => pickFilter(f.key)} />)}
+          {filters.map((f) => <Chip key={f.key} label={f.label} count={countFor(f.key)} active={filter === f.key} onPress={() => pickFilter(f.key)} />)}
         </ScrollView>
-        {isMpf ? <ChannelBoxes channel={channel} onChange={pickChannel} range={range} /> : null}
-        {isMpf && channel === "meta" ? (
+        {isMpf && canMeta ? <ChannelBoxes channel={channel} onChange={pickChannel} range={range} /> : null}
+        {isMpf && canMeta && channel === "meta" ? (
           <View style={{ flexDirection: "row", gap: 8 }}>
             <Chip label="Genuine leads" icon="checkmark-circle-outline" active={!junkOnly} onPress={() => setJunkOnly(false)} />
             <Chip label="Junk & test" icon="alert-circle-outline" count={junkCount.data} active={junkOnly} onPress={() => setJunkOnly(true)} />
           </View>
         ) : null}
-        {isMpf && channel === "meta" ? (
+        {isMpf && canMeta && channel === "meta" ? (
           <Pressable onPress={() => setFormsOpen(true)} style={st.formBtn}>
             <Ionicons name="document-text-outline" size={17} color="#0082FB" />
             <Text style={{ flex: 1, fontSize: 14, fontWeight: "600", color: colors.text }} numberOfLines={1}>{form ? form.name : `All lead forms${forms.data?.length ? ` (${forms.data.length})` : ""}`}</Text>

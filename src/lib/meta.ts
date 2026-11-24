@@ -14,9 +14,9 @@ export type MetaForm = {
 };
 
 /** Meta lead forms with lead counts (GET /crm/meta/forms). Pass from/to for the in-range count. */
-export function useMetaForms(range?: { from: string; to: string } | null) {
+export function useMetaForms(range?: { from: string; to: string } | null, enabled = true) {
   const qs = range ? `?from=${range.from}&to=${range.to}` : "";
-  return useQuery({ queryKey: ["meta-forms", range?.from ?? "all", range?.to ?? "all"], queryFn: () => api<MetaForm[]>(`/crm/meta/forms${qs}`), staleTime: 60_000 });
+  return useQuery({ queryKey: ["meta-forms", range?.from ?? "all", range?.to ?? "all"], queryFn: () => api<MetaForm[]>(`/crm/meta/forms${qs}`), staleTime: 60_000, enabled });
 }
 
 export type MetaStatus = {

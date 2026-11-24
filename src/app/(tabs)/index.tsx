@@ -9,7 +9,7 @@ import { LeadCard } from "@/components/LeadCard";
 import { RangeBar, rangeLabel, todayRange, type Range } from "@/components/RangeBar";
 import { Avatar, EmptyState, ErrorView, Section, type IconName } from "@/components/ui";
 import { api, apiMessage } from "@/lib/api";
-import { PIPELINES, type PipelineCounts, type PipelineKey } from "@/lib/pipelines";
+import { usePipelines, type PipelineCounts, type PipelineKey } from "@/lib/pipelines";
 import { colors, gradients, shadow } from "@/lib/theme";
 import type { LeadRow, Paged } from "@/lib/types";
 import { useAuth } from "@/providers/AuthProvider";
@@ -46,12 +46,14 @@ const leadsHref = (r: Range, extra: Record<string, string> = {}) => ({ pathname:
 
 export default function Home() {
   const insets = useSafeAreaInsets();
-  const { me } = useAuth();
+  const { me, can } = useAuth();
+  const pipelines = usePipelines();
+  const canMeta = can("lead.channel.meta");
   const [range, setRange] = useState<Range>(todayRange);
   const [rangeOpen, setRangeOpen] = useState(false);
   const rq = `from=${range.from}&to=${range.to}`;
   const label = rangeLabel(range);
-  const metaForms = useMetaForms(range);
+  const metaForms = useMetaForms(range, canMeta);
 
   const dash = useQuery({ queryKey: ["dashboard", range.from, range.to], queryFn: () => api<Dashboard>(`/crm/dashboard?${rq}`), placeholderData: keepPreviousData, refetchInterval: 60_000 });
   const pipes = useQuery({
@@ -64,13 +66,13 @@ export default function Home() {
   const lookups = useLookups();
   const newId = lookups.data?.statuses.find((x) => /^new$/i.test(x.name))?.id;
   const fallback = useQuery({
-    queryKey: ["pipelines-fallback", range.from, range.to, newId],
+    queryKey: ["pipelines-fallback", range.from, range.to, newId, pipelines.map((p) => p.key).join()],
     enabled: pipes.isError,
     placeholderData: keepPreviousData,
     queryFn: async () => {
       const total = (qs: string) => api<Paged<LeadRow>>(`/crm/leads?${rq}&limit=1&${qs}`).then((r) => r.meta.total).catch(() => 0);
       const out: Partial<Record<PipelineKey, PipelineCounts>> = {};
-      await Promise.all(PIPELINES.map(async (p) => {
+      await Promise.all(pipelines.map(async (p) => {
         const [t, un, nw] = await Promise.all([
           total(`pipeline=${p.key}`),
           total(`pipeline=${p.key}&assignedUserId=unassigned`),
@@ -102,7 +104,7 @@ export default function Home() {
   const fu = d?.mine.followups;
   const team = d?.team;
   const counts = pipeData?.counts ?? {};
-  const sum = (f: keyof PipelineCounts) => PIPELINES.reduce((a, p) => a + (counts[p.key]?.[f] ?? 0), 0);
+  const sum = (f: keyof PipelineCounts) => pipelines.reduce((a, p) => a + (counts[p.key]?.[f] ?? 0), 0);
   const totalReceived = received.data?.meta.total;
   const refreshing = (dash.isRefetching && !dash.isPlaceholderData) || (received.isRefetching && !received.isPlaceholderData);
 
@@ -175,11 +177,11 @@ export default function Home() {
             ))}
           </View>
 
-          {PIPELINES.map((p) => {
+          {pipelines.map((p) => {
             const c = counts[p.key];
             return (
               <Pressable key={p.key} onPress={() => router.push(leadsHref(range, { view: p.key }))} style={({ pressed }) => [st.pipeRow, pipeLoading && { opacity: 0.45 }, pressed && { backgroundColor: "#F8F6FE" }]}>
-                <View style={[st.pipeLogo, { backgroundColor: `${p.tone}14` }]}><Image source={p.logo} style={{ width: 26, height: 26 }} resizeMode="contain" /></View>
+                <View style={[st.pipeLogo, { backgroundColor: `${p.tone}14` }]}>{p.logo ? <Image source={p.logo} style={{ width: 26, height: 26 }} resizeMode="contain" /> : <Text style={{ color: p.tone, fontWeight: "800", fontSize: p.short.length > 3 ? 11 : 14 }}>{p.short}</Text>}</View>
                 <View style={{ flex: 1, gap: 5 }}>
                   <Text style={st.pipeTitle}>{p.title}</Text>
                   <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
@@ -218,7 +220,7 @@ export default function Home() {
           )}
         </Section>
 
-        {metaForms.data?.length ? (
+        {canMeta && metaForms.data?.length ? (
           <Section title={`Meta lead forms · ${label}`} action="All Meta leads" onAction={() => router.push({ pathname: "/leads", params: { view: "mpf", channel: "meta" } })}>
             <View style={[st.panel, { paddingVertical: 4, overflow: "hidden" }]}>
               {metaForms.data.slice(0, 6).map((f) => (

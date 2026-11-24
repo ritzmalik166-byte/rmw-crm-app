@@ -1,8 +1,12 @@
+import { Ionicons } from "@expo/vector-icons";
+import { useQueryClient } from "@tanstack/react-query";
+import * as Haptics from "expo-haptics";
 import { useState } from "react";
-import { View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { DateTimeField, SelectField, Sheet } from "@/components/kit";
-import { Button, Chip, Input, T } from "@/components/ui";
-import { api } from "@/lib/api";
+import { Avatar, Button, Chip, Input, SearchBar, T } from "@/components/ui";
+import { api, ApiError, apiMessage } from "@/lib/api";
+import { colors } from "@/lib/theme";
 import { useAction, useLookups } from "@/lib/hooks";
 import type { Followup, LeadDetail } from "@/lib/types";
 
@@ -26,21 +30,112 @@ export function EditLeadSheet({ lead, open, onClose }: { lead: LeadDetail; open:
   );
 }
 
+/** Which channel permission a lead needs, from its source type (mirrors backend ensureChannelAccess). */
+function channelFor(sourceType?: string | null): { key: "can_client" | "can_meta"; label: string } | null {
+  if (sourceType === "LANDING_PAGE" || sourceType === "META_FORM") return { key: "can_client", label: "Client Leads" };
+  if (sourceType === "META") return { key: "can_meta", label: "Meta Leads" };
+  return null;
+}
+
 export function AssignSheet({ lead, open, onClose }: { lead: LeadDetail; open: boolean; onClose: () => void }) {
   const { data: lk } = useLookups();
-  const [userId, setUserId] = useState<number | null>(lead.assigned_user_id);
+  const qc = useQueryClient();
+  const transferring = !!lead.assigned_user_id;
+  const [userId, setUserId] = useState<number | null>(null);
+  const [picked, setPicked] = useState(false); // "Unassigned" is a real choice when assigning
   const [reason, setReason] = useState("");
-  const save = useAction(() => api(`/crm/leads/${lead.id}/assign`, { method: "POST", body: { userId, reason: reason.trim() || null } }), { invalidate: leadKeys(lead.id), onDone: onClose });
-  const options = [{ value: null, label: "Unassigned", sub: "Nobody owns this lead" }, ...(lk?.users ?? []).map((u) => ({ value: u.id as number | null, label: u.full_name, sub: u.email }))];
+  const [q, setQ] = useState("");
+  const [grant, setGrant] = useState(true);
+  const [serverNeedsAccess, setServerNeedsAccess] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const users = (lk?.users ?? []).filter((u) => !(transferring && u.id === lead.assigned_user_id));
+  const needle = q.trim().toLowerCase();
+  const shown = needle ? users.filter((u) => u.full_name.toLowerCase().includes(needle) || u.email.toLowerCase().includes(needle)) : users;
+  const target = users.find((u) => u.id === userId) ?? null;
+  const ch = channelFor(lead.source_type);
+  const lacks = !!target && !!ch && (serverNeedsAccess || (target[ch.key] !== undefined && !Number(target[ch.key])));
+  const first = target?.full_name.split(" ")[0] ?? "";
+  const hasChoice = transferring ? !!target : picked;
+
+  const choose = (id: number | null) => { void Haptics.selectionAsync(); setUserId(id); setPicked(true); setServerNeedsAccess(false); setGrant(true); };
+
+  const submit = async () => {
+    setBusy(true);
+    try {
+      await api(`/crm/leads/${lead.id}/assign`, { method: "POST", body: { userId, reason: reason.trim() || null, ...(lacks && grant ? { grantAccess: true } : {}) } });
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      leadKeys(lead.id).forEach((k) => void qc.invalidateQueries({ queryKey: k }));
+      if (lacks && grant && target && ch) {
+        void qc.invalidateQueries({ queryKey: ["lookups"] });
+        Alert.alert("Access given", `${target.full_name} can now see ${ch.label}`);
+      }
+      onClose();
+    } catch (e) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      if (e instanceof ApiError && e.errorCode === "CHANNEL_ACCESS_REQUIRED") { setServerNeedsAccess(true); setGrant(true); }
+      else Alert.alert("Couldn't complete that", apiMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <Sheet open={open} onClose={onClose} title={lead.assigned_user_id ? "Transfer lead" : "Assign lead"}>
-      <SelectField label="Owner" icon="person-outline" value={userId} options={options} onChange={setUserId} placeholder="Choose a team member" />
-      {lead.assigned_user_id ? <Input label="Reason (optional)" value={reason} onChangeText={setReason} placeholder="e.g. Customer prefers Hindi" /> : null}
+    <Sheet open={open} onClose={onClose} title={transferring ? "Transfer lead" : "Assign lead"}>
+      <SearchBar value={q} onChangeText={setQ} placeholder="Search by name or email" />
+      <View style={ps.list}>
+        {!transferring && !needle ? (
+          <MemberRow name="Unassigned" sub="Nobody owns this lead" selected={picked && userId === null} onPress={() => choose(null)} unassigned />
+        ) : null}
+        {shown.map((u) => <MemberRow key={u.id} name={u.full_name} sub={u.email} selected={u.id === userId} onPress={() => choose(u.id)} />)}
+        {!shown.length ? <T muted size={13} style={{ padding: 16, textAlign: "center" }}>{needle ? "No team member matches that search." : "No one else can take this lead."}</T> : null}
+      </View>
       <T muted size={12}>Only people with access to this lead&apos;s website are listed.</T>
-      <Button title={lead.assigned_user_id ? "Transfer" : "Assign"} size="lg" onPress={() => save.mutate()} loading={save.isPending} disabled={userId === lead.assigned_user_id} />
+
+      {lacks && target && ch ? (
+        <View style={ps.notice}>
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            <Ionicons name="warning-outline" size={20} color="#B45309" />
+            <Text style={ps.noticeText}>{target.full_name} can&apos;t see {ch.label} yet. Without access they won&apos;t find this lead.</Text>
+          </View>
+          <Pressable onPress={() => { void Haptics.selectionAsync(); setGrant((g) => !g); }} style={ps.grantRow} accessibilityRole="checkbox" accessibilityState={{ checked: grant }}>
+            <Ionicons name={grant ? "checkbox" : "square-outline"} size={22} color={grant ? "#B45309" : "#D6A35C"} />
+            <Text style={{ flex: 1, color: "#7C3A06", fontWeight: "700", fontSize: 14 }}>Give {first || target.full_name} access to {ch.label}</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {target ? <Input label="Remark for the assignee (optional)" value={reason} onChangeText={setReason} multiline placeholder="e.g. Customer prefers Hindi, call after 6 pm" /> : null}
+      <Button title={transferring ? "Transfer" : "Assign"} size="lg" onPress={() => void submit()} loading={busy}
+        disabled={!hasChoice || userId === lead.assigned_user_id || (lacks && !grant)} />
     </Sheet>
   );
 }
+
+function MemberRow({ name, sub, selected, onPress, unassigned }: { name: string; sub: string; selected: boolean; onPress: () => void; unassigned?: boolean }) {
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [ps.row, selected && ps.rowOn, pressed && !selected && { backgroundColor: "#F7F5FD" }]} accessibilityRole="radio" accessibilityState={{ selected }}>
+      {unassigned ? <View style={ps.unAvatar}><Ionicons name="person-remove-outline" size={18} color={colors.textMuted} /></View> : <Avatar name={name} size={40} />}
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={[ps.name, selected && { color: colors.primary }]} numberOfLines={1}>{name}</Text>
+        <Text style={ps.sub} numberOfLines={1}>{sub}</Text>
+      </View>
+      <Ionicons name={selected ? "checkmark-circle" : "ellipse-outline"} size={22} color={selected ? colors.primary : colors.border} />
+    </Pressable>
+  );
+}
+
+const ps = StyleSheet.create({
+  list: { backgroundColor: "#fff", borderRadius: 18, borderWidth: 1, borderColor: colors.border, overflow: "hidden" },
+  row: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 60, paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#F1EEF9" },
+  rowOn: { backgroundColor: colors.primarySoft },
+  unAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#F1EEF9", alignItems: "center", justifyContent: "center" },
+  name: { fontSize: 15, fontWeight: "700", color: colors.text },
+  sub: { fontSize: 12.5, color: colors.textMuted, marginTop: 1 },
+  notice: { backgroundColor: "#FFF7E6", borderColor: "#F6D7A0", borderWidth: 1, borderRadius: 16, padding: 14, gap: 10 },
+  noticeText: { flex: 1, color: "#7C3A06", fontSize: 13.5, lineHeight: 19 },
+  grantRow: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 44 },
+});
 
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"] as const;
 const tomorrow10 = () => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(10, 0, 0, 0); return d; };

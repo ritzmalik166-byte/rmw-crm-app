@@ -3,7 +3,8 @@ import * as Haptics from "expo-haptics";
 import { Alert } from "react-native";
 import { api, apiMessage } from "@/lib/api";
 
-export type LookupUser = { id: number; full_name: string; email: string };
+/** can_client / can_meta: whether the person can see Client / Meta leads (role or extra grant). */
+export type LookupUser = { id: number; full_name: string; email: string; can_client?: number | boolean; can_meta?: number | boolean };
 export type LookupWebsite = { id: number; code: string; name: string };
 export type LookupStatus = { id: number; name: string; color: string | null; is_active: number | boolean; sort_order?: number };
 export type FullLookups = { statuses: LookupStatus[]; users: LookupUser[]; websites: LookupWebsite[]; sources: { id: number; name: string }[] };

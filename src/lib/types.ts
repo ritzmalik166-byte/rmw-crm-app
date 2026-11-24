@@ -3,6 +3,8 @@ export type Me = {
   roles: { code: string; name: string }[] | string[];
   permissions: string[];
   areas: { crm: boolean; admin: boolean; superAdmin: boolean };
+  /** Websites (pipelines) this user can access. Owner / Super Admin get all. */
+  websites?: { id: number; code: string; name: string }[];
 };
 
 export type LeadRow = {

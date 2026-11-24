@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
-import { View } from "react-native";
+import { Switch, Text, View } from "react-native";
 import { Group, ListRow, MultiSelectField, SelectField, StackHeader } from "@/components/kit";
 import { Avatar, Button, ErrorView, Input, Loading, Screen, T } from "@/components/ui";
 import { PASSWORD_RULES, strongPassword, useDepartments, useRoles, useTeams, useWebsites } from "@/lib/admin";
@@ -14,7 +14,14 @@ import { useAuth } from "@/providers/AuthProvider";
 type UserDetail = {
   id: number; full_name: string; email: string; mobile: string | null; avatar: string | null; status: string; department_id: number | null;
   roleIds: number[]; websiteIds: number[]; teamIds: number[];
+  /** Lead channel permissions granted to this user directly, and which of them the role already includes. */
+  extraPermissions?: string[]; rolePermissions?: string[];
 };
+
+const CHANNELS = [
+  { perm: "lead.channel.client", label: "Client Leads", icon: "briefcase-outline" as const },
+  { perm: "lead.channel.meta", label: "Meta Leads", icon: "logo-facebook" as const },
+];
 
 function Form({ user }: { user: UserDetail | null }) {
   const { can, canSA, me } = useAuth();
@@ -28,13 +35,15 @@ function Form({ user }: { user: UserDetail | null }) {
   const [departmentId, setDepartmentId] = useState<number | null>(user?.department_id ?? null);
   const [teamIds, setTeamIds] = useState<number[]>(user?.teamIds ?? []);
   const [websiteIds, setWebsiteIds] = useState<number[]>(user?.websiteIds ?? []);
+  const [extra, setExtra] = useState<string[]>(user?.extraPermissions ?? []);
+  const fromRole = new Set(user?.rolePermissions ?? []);
   const set = (k: keyof typeof f) => (v: string) => setF((s) => ({ ...s, [k]: v }));
   const keys = [["admin", "users"], ["admin", "user", String(user?.id)]];
 
   const save = useAction(
     () => isNew
       ? api("/admin/users", { method: "POST", body: { fullName: f.fullName.trim(), email: f.email.trim(), mobile: f.mobile.trim(), password: f.password, roleId, departmentId, teamIds, websiteIds } })
-      : api(`/admin/users/${user.id}`, { method: "PATCH", body: { fullName: f.fullName.trim(), roleId: roleId ?? undefined, departmentId, teamIds, websiteIds, ...(f.password ? { newPassword: f.password } : {}) } }),
+      : api(`/admin/users/${user.id}`, { method: "PATCH", body: { fullName: f.fullName.trim(), roleId: roleId ?? undefined, departmentId, teamIds, websiteIds, extraPermissions: extra, ...(f.password ? { newPassword: f.password } : {}) } }),
     { invalidate: keys, success: isNew ? "User created" : "User updated", onDone: () => router.back() },
   );
   const setStatus = useAction((status: string) => api(`/admin/users/${user!.id}/status`, { method: "POST", body: { status } }), { invalidate: keys });
@@ -64,6 +73,28 @@ function Form({ user }: { user: UserDetail | null }) {
       <MultiSelectField label="Website access" values={websiteIds} onChange={setWebsiteIds} options={(sites.data ?? []).map((w) => ({ value: w.id, label: w.name, sub: w.code }))} />
       <SelectField label="Department" icon="business-outline" value={departmentId} onChange={setDepartmentId} options={[{ value: null, label: "None" }, ...(depts.data ?? []).map((d) => ({ value: d.id as number | null, label: d.name }))]} />
       <MultiSelectField label="Teams" values={teamIds} onChange={setTeamIds} options={(teams.data ?? []).map((t) => ({ value: t.id, label: t.name, sub: t.department_name }))} placeholder="None" />
+      {!isNew ? (
+        <View style={{ gap: 7 }}>
+          <T muted size={13} bold>Lead access</T>
+          <Group>
+            {CHANNELS.map((c, i) => {
+              const byRole = fromRole.has(c.perm);
+              const on = byRole || extra.includes(c.perm);
+              return (
+                <ListRow key={c.perm} icon={c.icon} label={c.label} last={i === CHANNELS.length - 1}
+                  right={
+                    <View style={{ alignItems: "flex-end", gap: 2 }}>
+                      <Switch value={on} disabled={byRole || !editable} trackColor={{ true: colors.primary, false: colors.border }}
+                        onValueChange={(v) => setExtra((xs) => (v ? [...xs.filter((x) => x !== c.perm), c.perm] : xs.filter((x) => x !== c.perm)))} />
+                      {byRole ? <Text style={{ fontSize: 11, color: colors.textMuted }}>Included by their role</Text> : null}
+                    </View>
+                  } />
+              );
+            })}
+          </Group>
+          <T muted size={12}>Extra lead channels for this user only, on top of their role. Given automatically when you assign them a client or Meta lead.</T>
+        </View>
+      ) : null}
       <Input label={isNew ? "Password" : "Set a new password (optional)"} icon="key-outline" value={f.password} onChangeText={set("password")} secureTextEntry />
       {f.password || isNew ? (
         <View style={{ gap: 2, paddingHorizontal: 4 }}>
