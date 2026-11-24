@@ -6,6 +6,7 @@ import * as SystemUI from "expo-system-ui";
 import { useCallback, useState } from "react";
 import { View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { AssignmentAck } from "@/components/AssignmentAck";
 import { BrandSplash } from "@/components/BrandSplash";
 import { ApiError } from "@/lib/api";
 import { colors } from "@/lib/theme";
@@ -55,6 +56,7 @@ function RootStack() {
           </Stack.Protected>
         </Stack>
       ) : null}
+      {me && !loading ? <AssignmentAck key={me.user.id} /> : null}
       {splash ? <BrandSplash done={!loading} onFinish={finish} /> : null}
     </View>
   );

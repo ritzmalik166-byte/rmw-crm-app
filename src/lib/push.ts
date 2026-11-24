@@ -50,6 +50,32 @@ export async function unregisterPush() {
   await api("/crm/push/expo/unregister", { method: "POST", body: { token } }).catch(() => {});
 }
 
+/** Assignment notification as seen by the app. The server's Expo push currently carries only { link, type }; the rest is optional. */
+export type AssignmentPush = {
+  type: "LEAD_ASSIGNED" | "LEAD_REASSIGNED"; leadId: number | null;
+  needsAck?: boolean; name?: string | null; externalLeadId?: string | null; remark?: string | null; by?: string | null;
+};
+const assignmentListeners = new Set<(n: AssignmentPush) => void>();
+/** Subscribe to assignment notifications received while the app is in the foreground. Returns an unsubscribe fn. */
+export const onAssignmentPush = (fn: (n: AssignmentPush) => void) => {
+  assignmentListeners.add(fn);
+  return () => void assignmentListeners.delete(fn);
+};
+
+function toAssignment(data: Record<string, unknown> | undefined): AssignmentPush | null {
+  const type = data?.type;
+  if (type !== "LEAD_ASSIGNED" && type !== "LEAD_REASSIGNED") return null;
+  const link = typeof data?.link === "string" ? data.link : "";
+  const fromLink = link.match(/\/crm\/leads\/(\d+)/)?.[1];
+  const leadId = Number(data?.leadId ?? fromLink) || null;
+  const str = (v: unknown) => (typeof v === "string" ? v : null);
+  return {
+    type, leadId,
+    needsAck: typeof data?.needsAck === "boolean" ? data.needsAck : undefined,
+    name: str(data?.name), externalLeadId: str(data?.externalLeadId), remark: str(data?.remark), by: str(data?.by),
+  };
+}
+
 /** Open the screen a notification points at (web-style links like /crm/leads/123). */
 function openFromData(data: Record<string, unknown> | undefined) {
   const link = typeof data?.link === "string" ? data.link : "";
@@ -81,10 +107,15 @@ export function usePushNotifications(enabled: boolean) {
       }
     })();
 
-    const refresh = () => ["notifications", "dashboard", "leads", "followups"].forEach((k) => void qc.invalidateQueries({ queryKey: [k] }));
-    const received = Notifications.addNotificationReceivedListener(refresh);
+    // `me` too: channel access may have just been granted (the web gets a socket event; the app has none).
+    const refresh = () => ["notifications", "dashboard", "leads", "followups", "pipelines", "me"].forEach((k) => void qc.invalidateQueries({ queryKey: [k] }));
+    const received = Notifications.addNotificationReceivedListener((n) => {
+      refresh();
+      const a = toAssignment(n.request.content.data);
+      if (a) assignmentListeners.forEach((fn) => fn(a));
+    });
     const tapped = Notifications.addNotificationResponseReceivedListener((r) => { refresh(); openFromData(r.notification.request.content.data); });
-    const appState = AppState.addEventListener("change", (s) => { if (s === "active") void qc.invalidateQueries({ queryKey: ["notifications"] }); });
+    const appState = AppState.addEventListener("change", (s) => { if (s === "active") { void qc.invalidateQueries({ queryKey: ["notifications"] }); void qc.invalidateQueries({ queryKey: ["me"] }); } });
 
     if (!handledLaunch.current) {
       handledLaunch.current = true;
