@@ -57,7 +57,9 @@
           "photosPermission": "RMW CRM uses your photos to set your profile picture.",
           "cameraPermission": "RMW CRM uses the camera to take your profile picture."
         }
-      ]
+      ],
+      "expo-audio",
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true

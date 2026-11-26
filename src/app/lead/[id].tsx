@@ -16,6 +16,7 @@ import type { Followup, LeadDetail, Lookups } from "@/lib/types";
 import { useAuth } from "@/providers/AuthProvider";
 import { MetaSourceCard } from "@/components/Meta";
 import { LEAD_SOURCE_TYPES } from "@/lib/meta";
+import { AiCallsPanel } from "@/components/AiCalls";
 
 const ACTIVITY: Record<string, { label: string; icon: IconName; tone: string }> = {
   LEAD_CREATED: { label: "Lead created", icon: "sparkles", tone: colors.blue },
@@ -30,6 +31,14 @@ const ACTIVITY: Record<string, { label: string; icon: IconName; tone: string }> 
   CONVERTED: { label: "Converted", icon: "trophy", tone: colors.success },
   LEAD_MERGED: { label: "Merged", icon: "git-merge", tone: "#F76B15" },
   META_LEAD_RECEIVED: { label: "Lead received from Meta Ads", icon: "infinite", tone: "#0082FB" },
+  AI_CALL_REQUESTED: { label: "AI call requested", icon: "hardware-chip", tone: colors.primary },
+  AI_CALL_STARTED: { label: "AI call started", icon: "call", tone: colors.blue },
+  AI_CALL_COMPLETED: { label: "AI call completed", icon: "hardware-chip", tone: colors.success },
+  AI_CALL_UNANSWERED: { label: "AI call not answered", icon: "call-outline", tone: colors.warning },
+  AI_CALL_RESULT: { label: "AI call result", icon: "hardware-chip", tone: colors.primary },
+  AI_CALL_FAILED: { label: "AI call not connected", icon: "call-outline", tone: colors.warning },
+  AI_CALL_CANCELLED: { label: "AI call cancelled", icon: "ban", tone: colors.textMuted },
+  AI_CALL_SKIPPED: { label: "AI call skipped", icon: "ban", tone: colors.textMuted },
 };
 
 const describe = (type: string, raw: unknown) => {
@@ -40,6 +49,8 @@ const describe = (type: string, raw: unknown) => {
   if (type === "FOLLOWUP_CREATED" && m.dueAt) return `Due ${formatDateTime(m.dueAt as string)}`;
   if (type === "META_LEAD_RECEIVED") return [m.campaign && `Campaign: ${m.campaign}`, m.form && `Form: ${m.form}`].filter(Boolean).join(" · ") || null;
   if (type === "LEAD_SYNCED" && m.via === "meta") return "Re-delivered by Meta";
+  if (type === "AI_CALL_COMPLETED") return [m.outcome && titleCase(m.outcome as string), m.summary as string].filter(Boolean).join(" · ") || null;
+  if (type === "AI_CALL_REQUESTED" && m.scheduledAt) return `For ${formatDateTime(m.scheduledAt as string)}`;
   return (m.reason as string) || null;
 };
 
@@ -97,7 +108,7 @@ export default function LeadScreen() {
   const [note, setNote] = useState("");
   const [slot, setSlot] = useState<number | null>(null);
   const [fuNote, setFuNote] = useState("");
-  const [tab, setTab] = useState<"activity" | "notes">("activity");
+  const [tab, setTab] = useState<"activity" | "notes" | "ai">("activity");
   const [sheet, setSheet] = useState<null | "edit" | "assign" | "followup">(null);
   const [editingFu, setEditingFu] = useState<Followup | null>(null);
 
@@ -283,14 +294,16 @@ export default function LeadScreen() {
 
         <View style={{ gap: 10 }}>
           <View style={st.tabs}>
-            {(["activity", "notes"] as const).map((t) => (
+            {(can("aicall.view") ? (["activity", "notes", "ai"] as const) : (["activity", "notes"] as const)).map((t) => (
               <Pressable key={t} onPress={() => setTab(t)} style={[st.tabBtn, tab === t && st.tabActive]}>
-                <Text style={{ fontWeight: "700", color: tab === t ? colors.primary : colors.textMuted }}>{t === "activity" ? `Timeline · ${lead.activities.length}` : `Notes · ${lead.notes.length}`}</Text>
+                <Text numberOfLines={1} style={{ fontWeight: "700", color: tab === t ? colors.primary : colors.textMuted }}>{t === "activity" ? `Timeline · ${lead.activities.length}` : t === "notes" ? `Notes · ${lead.notes.length}` : "AI calls"}</Text>
               </Pressable>
             ))}
           </View>
 
-          {tab === "notes" ? (
+          {tab === "ai" ? (
+            <AiCallsPanel leadId={lead.id} hasPhone={Boolean(lead.phone)} />
+          ) : tab === "notes" ? (
             <View style={[st.panel, { padding: 16, gap: 12 }]}>
               <Input value={note} onChangeText={setNote} placeholder="Log a call outcome, budget, requirement…" multiline maxLength={5000} />
               <Button title="Save note" icon="send" onPress={() => addNote.mutate()} loading={addNote.isPending} disabled={!note.trim()} />

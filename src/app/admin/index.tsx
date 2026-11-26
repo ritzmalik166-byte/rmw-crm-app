@@ -41,6 +41,13 @@ export default function AdminHub() {
       ],
     },
     {
+      title: "AI calling",
+      items: [
+        { icon: "hardware-chip", tone: colors.primary, label: "AI calling agent", href: "/admin/ai-calling" as Href, perm: ["aicall.manage", "settings.view"], sa: true },
+        { icon: "headset", tone: colors.success, label: "Call recordings", href: "/admin/call-recordings" as Href, perm: "aicall.view", sa: true },
+      ],
+    },
+    {
       title: "System",
       items: [
         { icon: "settings", tone: colors.textMuted, label: "System settings", href: "/admin/settings", perm: "settings.view" },
